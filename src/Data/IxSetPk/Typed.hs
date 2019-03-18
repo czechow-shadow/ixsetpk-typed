@@ -1,17 +1,16 @@
-{-# LANGUAGE DataKinds              #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE KindSignatures         #-}
-{-# LANGUAGE NamedFieldPuns         #-}
-{-# LANGUAGE RankNTypes             #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 module Data.IxSetPk.Typed
   ( module Data.IxSetPk.Typed
   , module X
   ) where
 
-import           Data.IxSet.Typed    as X (IxSet, ixGen, ixList, ixFun)
+import           Data.IxSet.Typed    as X (IxSet, ixFun, ixGen, ixList)
 import qualified Data.IxSet.Typed    as IX
 import qualified Data.IxSet.Typed.Ix as Ix
 import qualified Data.List           as List
@@ -48,14 +47,15 @@ pkFun = Pk Map.empty
 
 type PkOp = forall k a. (Ord k, Ord a) => k -> a -> Map k a -> Map k a
 
+-- | This is internal function, not exposed to the outside world
 change :: forall ixs pkix a. (IsPkIx pkix a, IX.Indexable ixs a)
        => IX.SetOp
-       -> PkOp
        -> IX.IndexOp
+       -> PkOp
        -> a
        -> IxSetPk pkix ixs a
        -> IxSetPk pkix ixs a
-change opS opPk opI x (IxSetPk ixset pkix) =
+change opS opI opPk x (IxSetPk ixset pkix) =
   IxSetPk (IX.change opS opI x ixset) (update pkix)
   where
     update (Pk m pkfun) = Pk (opPk (pkfun x) x m) pkfun
@@ -64,20 +64,19 @@ change opS opPk opI x (IxSetPk ixset pkix) =
 insert :: (IsPkIx pkix a, IX.Indexable ixs a)
        => a -> IxSetPk pkix ixs a -> Maybe (IxSetPk pkix ixs a)
 insert v ixset@(IxSetPk _ (Pk ix ixfun)) = case Map.lookup (ixfun v) ix of
-  Nothing -> Just $ change Set.insert Map.insert Ix.insert v ixset
+  Nothing -> Just $ change Set.insert Ix.insert Map.insert v ixset
   Just _  -> Nothing
 
 upsert :: (IsPkIx pkix a, IX.Indexable ixs a)
        => a -> IxSetPk pkix ixs a -> IxSetPk pkix ixs a
 upsert v ixset@(IxSetPk _ (Pk _ ixfun)) =
-  change Set.insert Map.insert Ix.insert v $
-  deletePk (ixfun v) ixset
+  change Set.insert Ix.insert Map.insert v $ deletePk (ixfun v) ixset
 
 deletePk :: (IsPkIx pkix a, IX.Indexable ixs a)
          => pkix -> IxSetPk pkix ixs a -> IxSetPk pkix ixs a
 deletePk pk ixset = case lookupPk pk ixset of
   Nothing -> ixset
-  Just v  -> change Set.delete (\x _ m -> Map.delete x m) Ix.delete v ixset
+  Just v  -> change Set.delete Ix.delete (\x _ m -> Map.delete x m) v ixset
 
 lookupPk :: (IsPkIx pkix a, IX.Indexable ixs a)
          => pkix -> IxSetPk pkix ixs a -> Maybe a
